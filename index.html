@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GeoJSON to Table - Bootstrap</title>
 
     <!-- Bootstrap 5 -->
@@ -10,19 +11,114 @@
       rel="stylesheet"
     />
 
+    <!-- Leaflet & Leaflet Draw -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"
+    />
+
     <style>
+      :root {
+        --map-height: 540px;
+      }
+
+      body {
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, #e8fff3, transparent 28%),
+          linear-gradient(180deg, #f7fafc 0%, #eef3f8 100%);
+      }
+
       tr.stop-row td {
-        background-color: #DC4C64 !important;
+        background-color: #dc4c64 !important;
+      }
+
+      .app-card {
+        border: 0;
+        border-radius: 1.25rem;
+        overflow: hidden;
+      }
+
+      .map-panel {
+        background: linear-gradient(180deg, #0b1e17 0%, #163127 100%);
+        color: #f4fff8;
+      }
+
+      .map-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      #map {
+        min-height: var(--map-height);
+        width: 100%;
+        border-radius: 1rem;
+        overflow: hidden;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      }
+
+      .helper-text {
+        font-size: 0.9rem;
+        color: #d6e6dd;
+      }
+
+      .leaflet-container {
+        background: #b8d7c2;
+      }
+
+      .leaflet-draw-toolbar a {
+        border-radius: 0.5rem !important;
+      }
+
+      .leaflet-control-geocoder {
+        border: 0;
+        border-radius: 0.75rem;
+        overflow: hidden;
+        box-shadow: 0 12px 28px rgba(11, 30, 23, 0.18);
+      }
+
+      .leaflet-control-geocoder-form input {
+        min-width: 260px;
+        padding-inline: 0.85rem;
+      }
+
+      .leaflet-control-geocoder-icon {
+        background-color: #ffffff;
+      }
+
+      @media (max-width: 991.98px) {
+        :root {
+          --map-height: 420px;
+        }
+
+        .leaflet-control-geocoder-form input {
+          min-width: 200px;
+        }
       }
     </style>
   </head>
-  <body class="bg-light">
-    <div class="container-fluid py-4">
-      <div class="card shadow-sm mb-4">
-        <div class="card-body">
-          <h4 class="mb-3">Masukkan Data GeoJSON</h4>
+  <body>
+    <div class="container-fluid py-4 px-lg-4">
+      <div class="row g-4 align-items-stretch">
+        <div class="col-xl-5">
+          <div class="card shadow app-card h-100">
+            <div class="card-body p-4">
+              <h4 class="mb-3">Masukkan Data GeoJSON</h4>
+              <p class="text-secondary mb-3">
+                Bisa paste GeoJSON manual, atau gambar polyline di map lalu sync
+                otomatis ke textarea.
+              </p>
 
-          <textarea id="jsonInput" class="form-control" rows="12">
+              <textarea id="jsonInput" class="form-control" rows="12">
 {
   "type": "FeatureCollection",
   "features": [
@@ -39,113 +135,165 @@
     }
   ]
 }
-          </textarea>
+              </textarea>
 
-          <div class="row mt-3">
-            <div class="col-md-3">
-              <label class="form-label">Plat Nomor</label>
-              <div class="input-group">
-                <input
-                  type="text"
-                  id="licensePlate"
-                  class="form-control"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-
-          <div class="row mt-3">
-            <div class="col-md-3">
-              <label class="form-label">Second</label>
-              <div class="input-group">
-                <input
-                  type="number"
-                  id="second"
-                  class="form-control"
-                  value="10"
-                />
-                <button class="btn btn-warning" onclick="regenerateSecond()">
-                  Generate
+              <div class="d-flex flex-wrap gap-2 mt-3">
+                <button
+                  class="btn btn-outline-success"
+                  id="loadGeoJsonBtn"
+                  type="button"
+                >
+                  Muat GeoJSON ke Map
+                </button>
+                <button
+                  class="btn btn-outline-secondary"
+                  id="clearPolylineBtn"
+                  type="button"
+                >
+                  Bersihkan Polyline
                 </button>
               </div>
+
+              <div class="row mt-3">
+                <div class="col-md-6">
+                  <label class="form-label">Plat Nomor</label>
+                  <input
+                    type="text"
+                    id="licensePlate"
+                    class="form-control"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div class="row mt-3">
+                <div class="col-md-6">
+                  <label class="form-label">Second</label>
+                  <div class="input-group">
+                    <input
+                      type="number"
+                      id="second"
+                      class="form-control"
+                      value="10"
+                    />
+                    <button
+                      class="btn btn-warning"
+                      id="regenerateSecondBtn"
+                      type="button"
+                    >
+                      Generate
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row mt-3">
+                <div class="col-md-6">
+                  <label class="form-label">Minimal Speed</label>
+                  <input
+                    type="number"
+                    id="minSpeed"
+                    class="form-control"
+                    value="0"
+                  />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Maksimal Speed</label>
+                  <input
+                    type="number"
+                    id="maxSpeed"
+                    class="form-control"
+                    value="120"
+                  />
+                </div>
+              </div>
+
+              <div class="row mt-3">
+                <div class="col-md-6">
+                  <label class="form-label">Minimal Temperature 1</label>
+                  <input
+                    type="number"
+                    id="minTemp1"
+                    class="form-control"
+                    value="0"
+                  />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Maksimal Temperature 1</label>
+                  <input
+                    type="number"
+                    id="maxTemp1"
+                    class="form-control"
+                    value="0"
+                  />
+                </div>
+              </div>
+
+              <div class="row mt-3">
+                <div class="col-md-6">
+                  <label class="form-label">Minimal Temperature 2</label>
+                  <input
+                    type="number"
+                    id="minTemp2"
+                    class="form-control"
+                    value="0"
+                  />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Maksimal Temperature 2</label>
+                  <input
+                    type="number"
+                    id="maxTemp2"
+                    class="form-control"
+                    value="0"
+                  />
+                </div>
+              </div>
+
+              <button
+                class="btn btn-primary mt-3"
+                id="convertTableBtn"
+                type="button"
+              >
+                Tampilkan Tabel Koordinat
+              </button>
             </div>
           </div>
+        </div>
 
-          <div class="row mt-3">
-            <div class="col-md-3">
-              <label class="form-label">Minimal Speed</label>
-              <input
-                type="number"
-                id="minSpeed"
-                class="form-control"
-                value="0"
-              />
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Maksimal Speed</label>
-              <input
-                type="number"
-                id="maxSpeed"
-                class="form-control"
-                value="120"
-              />
+        <div class="col-xl-7">
+          <div class="card shadow app-card h-100 map-panel">
+            <div class="card-body p-4">
+              <div class="d-flex flex-wrap justify-content-between gap-3 mb-3">
+                <div>
+                  <h4 class="mb-1">Polyline Drawer</h4>
+                  <div class="helper-text">
+                    Gunakan tool polyline di kiri atas map, edit titik bila perlu,
+                    cari alamat dulu bila perlu, lalu hasilnya akan langsung
+                    tersimpan ke GeoJSON.
+                  </div>
+                </div>
+                <div class="map-toolbar">
+                  <span class="badge text-bg-light">
+                    Total titik: <span id="mapPointCount">0</span>
+                  </span>
+                  <span class="badge text-bg-success">
+                    Total garis: <span id="mapLineCount">0</span>
+                  </span>
+                </div>
+              </div>
+
+              <div id="map"></div>
             </div>
           </div>
-
-          <div class="row mt-3">
-            <div class="col-md-3">
-              <label class="form-label">Minimal Temperature 1</label>
-              <input
-                type="number"
-                id="minTemp1"
-                class="form-control"
-                value="0"
-              />
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Maksimal Temperature 1</label>
-              <input
-                type="number"
-                id="maxTemp1"
-                class="form-control"
-                value="0"
-              />
-            </div>
-          </div>
-
-          <div class="row mt-3">
-            <div class="col-md-3">
-              <label class="form-label">Minimal Temperature 2</label>
-              <input
-                type="number"
-                id="minTemp2"
-                class="form-control"
-                value="0"
-              />
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Maksimal Temperature 2</label>
-              <input
-                type="number"
-                id="maxTemp2"
-                class="form-control"
-                value="0"
-              />
-            </div>
-          </div>
-
-          <button class="btn btn-primary mt-3" onclick="convertToTable()">
-            Tampilkan Tabel Koordinat
-          </button>
         </div>
       </div>
 
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center">
-            <h4>Hasil Tabel Koordinat</h4>
-            <button class="btn btn-sm btn-success" onclick="exportToTxt()">
+      <div class="card shadow app-card mt-4">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <h4 class="mb-0">Hasil Tabel Koordinat</h4>
+            <button class="btn btn-sm btn-success" id="exportTxtBtn" type="button">
               Export TXT
             </button>
           </div>
@@ -154,371 +302,727 @@
       </div>
     </div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
     <script>
-      let globalSeq = 0;
-
-      function convertToTable() {
-        const jsonText = document.getElementById("jsonInput").value;
-        let data;
-
-        try {
-          data = JSON.parse(jsonText);
-        } catch (e) {
-          alert("JSON tidak valid!");
-          return;
+      class GeoJsonService {
+        static parse(text) {
+          try {
+            return JSON.parse(text);
+          } catch (error) {
+            throw new Error("JSON tidak valid.");
+          }
         }
 
-        const second = parseInt(document.getElementById("second").value);
-        const minSpeed = parseInt(document.getElementById("minSpeed").value);
-        const maxSpeed = parseInt(document.getElementById("maxSpeed").value);
-        const minTemp1 = parseInt(document.getElementById("minTemp1").value);
-        const maxTemp1 = parseInt(document.getElementById("maxTemp1").value);
-        const minTemp2 = parseInt(document.getElementById("minTemp2").value);
-        const maxTemp2 = parseInt(document.getElementById("maxTemp2").value);
-
-        if (isNaN(minSpeed) || isNaN(maxSpeed) || minSpeed > maxSpeed) {
-          alert("Range speed tidak valid! Pastikan minimal ≤ maksimal.");
-          return;
+        static isCoordinatePair(value) {
+          return (
+            Array.isArray(value) &&
+            value.length >= 2 &&
+            Number.isFinite(Number(value[0])) &&
+            Number.isFinite(Number(value[1]))
+          );
         }
 
-        const coordinates = data?.features?.[0]?.geometry?.coordinates || [];
-
-        let html = `
-      <table class="table table-bordered table-striped">
-        <thead class="table-light">
-          <tr>
-            <th>Seq</th>
-            <th>No</th>
-            <th>Second</th>
-            <th>Latitude</th>
-            <th>Longitude</th>
-            <th>Satellites</th>
-            <th>Speed</th>
-            <th>ACC</th>
-            <th>DIGITALINPUT2</th>
-            <th>DALLASTEMPERATURE1</th>
-            <th>DALLASTEMPERATURE2</th>
-            <th>Set</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-        let interval = 0;
-        globalSeq = coordinates.length;
-        coordinates.forEach((item, index) => {
-          const seq = index + 1;
-          const lon = item[0];
-          const lat = item[1];
-
-          let satellites = 15;
-          let speed;
-          let acc;
-
-          const temp1 =
-            Math.floor(Math.random() * (maxTemp1 - minTemp1 + 1)) + minTemp1;
-          const temp2 =
-            Math.floor(Math.random() * (maxTemp2 - minTemp2 + 1)) + minTemp2;
-
-          if (index === 0) {
-            interval = 0;
-            speed = 0;
-            acc = 0;
-          } else {
-            interval += second;
-            speed =
-              Math.floor(Math.random() * (maxSpeed - minSpeed + 1)) + minSpeed;
-            acc = 1;
+        static collectCoordinatesFromGeometry(geometry) {
+          if (!geometry || !geometry.type) {
+            return [];
           }
 
-          html += `
-    <tr>
-      <td class="seq">${seq}</td>
-      <td class="no">${index + 1}</td>
-
-      <td><input type="number" class="form-control form-control-sm second-input" value="${interval}"></td>
-
-      <td class="lat">${lat}</td>
-      <td class="lon">${lon}</td>
-
-      <td class="sat">${satellites}</td>
-
-      <td><input type="number" class="form-control form-control-sm speed-input" value="${speed}"></td>
-
-      <td>
-        <select class="form-select form-select-sm acc-input">
-          <option value="1" ${acc === 1 ? "selected" : ""}>1</option>
-          <option value="0" ${acc === 0 ? "selected" : ""}>0</option>
-        </select>
-      </td>
-
-      <td>
-        <select class="form-select form-select-sm digital-input">
-          <option value="1" ${acc === 1 ? "selected" : ""}>1</option>
-          <option value="0" ${acc === 0 ? "selected" : ""}>0</option>
-        </select>
-      </td>
-
-      <td><input type="number" class="form-control form-control-sm temp1-input" value="${temp1}"></td>
-      <td><input type="number" class="form-control form-control-sm temp2-input" value="${temp2}"></td>
-
-      <td>
-  <select class="form-select form-select-sm set-select" onchange="handleSetAction(this)">
-    <option value="">-- Pilih --</option>
-    <option value="duplicate">Duplicate</option>
-    <option value="delete">Delete</option>
-    <option value="stop">Berhenti</option>
-  </select>
-</td>
-    </tr>
-  `;
-        });
-
-        html += `
-        </tbody>
-      </table>
-    `;
-
-        document.getElementById("result").innerHTML = html;
-      }
-
-      function handleSetAction(el) {
-        const action = el.value;
-        if (!action) return;
-
-        if (action === "duplicate") {
-          duplicateRow(el);
-        } else if (action === "delete") {
-          deleteRow(el);
-        } else if (action === "stop") {
-          stopRow(el);
-        }
-
-        el.value = "";
-      }
-
-      function duplicateRow(el) {
-        if (el.value !== "duplicate") return;
-
-        const row = el.closest("tr");
-        const clone = row.cloneNode(true);
-
-        clone.querySelector(".set-select").value = "";
-
-        row.parentNode.insertBefore(clone, row.nextSibling);
-
-        updateRowNumbers();
-
-        // ⬅️ Tambahkan ini
-        recalculateSeconds();
-      }
-
-      function deleteRow(el) {
-        const row = el.closest("tr");
-        const tbody = row.parentNode;
-
-        const totalRows = tbody.querySelectorAll("tr").length;
-
-        if (totalRows <= 1) {
-          alert("Minimal harus ada 1 baris!");
-          return;
-        }
-
-        row.remove();
-        updateRowNumbers();
-        recalculateSeconds();
-      }
-
-      function updateRowNumbers() {
-        const rows = document.querySelectorAll("#result table tbody tr");
-        rows.forEach((row, index) => {
-          row.querySelector(".no").innerText = index + 1;
-        });
-      }
-
-      function regenerateSecond() {
-        const interval = parseInt(document.getElementById("second").value);
-
-        if (isNaN(interval) || interval < 0) {
-          alert("Interval second tidak valid!");
-          return;
-        }
-
-        const rows = document.querySelectorAll("#result table tbody tr");
-
-        let currentSecond = 0;
-        rows.forEach((row, index) => {
-          const secondInput = row.querySelector(".second-input");
-
-          if (index === 0) {
-            currentSecond = 0;
-          } else {
-            currentSecond = interval * index;
+          if (geometry.type === "LineString") {
+            return Array.isArray(geometry.coordinates)
+              ? geometry.coordinates.filter(GeoJsonService.isCoordinatePair)
+              : [];
           }
 
-          secondInput.value = currentSecond;
-        });
-      }
+          if (geometry.type === "MultiLineString") {
+            const result = [];
+            const lines = Array.isArray(geometry.coordinates)
+              ? geometry.coordinates
+              : [];
 
-      function stopRow(el) {
-        const row = el.closest("tr");
-        const tbody = row.parentNode;
+            lines.forEach((line) => {
+              if (!Array.isArray(line)) {
+                return;
+              }
 
-        const secondInterval = parseInt(
-          document.getElementById("second").value
-        );
-        if (isNaN(secondInterval)) {
-          alert("Second interval tidak valid!");
-          return;
+              line
+                .filter(GeoJsonService.isCoordinatePair)
+                .forEach((coordinate, index) => {
+                  const previous = result[result.length - 1];
+                  const isDuplicateStart =
+                    index === 0 &&
+                    previous &&
+                    previous[0] === coordinate[0] &&
+                    previous[1] === coordinate[1];
+
+                  if (!isDuplicateStart) {
+                    result.push(coordinate);
+                  }
+                });
+            });
+
+            return result;
+          }
+
+          return [];
         }
 
-        const originalSecond =
-          parseInt(row.querySelector(".second-input").value) || 0;
-        const seq = row.querySelector(".seq").innerText;
-        const lat = row.querySelector(".lat").innerText;
-        const lon = row.querySelector(".lon").innerText;
+        static extractCoordinates(data) {
+          if (!data) {
+            return [];
+          }
 
-        const nextSibling = row.nextSibling;
-        row.remove();
+          if (data.type === "FeatureCollection") {
+            return (data.features || []).flatMap((feature) =>
+              GeoJsonService.collectCoordinatesFromGeometry(feature.geometry)
+            );
+          }
 
-        const second1 = originalSecond;
-        const second2 = originalSecond + 120;
-        const second3 = second2 + secondInterval;
+          if (data.type === "Feature") {
+            return GeoJsonService.collectCoordinatesFromGeometry(data.geometry);
+          }
 
-        const row1 = createStopRow(seq, second1, lat, lon, 0, 1);
-        const row2 = createStopRow(seq, second2, lat, lon, 0, 0);
-        const row3 = createStopRow(seq, second3, lat, lon, 0, 1);
-
-        // Sisipkan 3 baris di posisi yang tepat
-        if (nextSibling) {
-          tbody.insertBefore(row3, nextSibling);
-          tbody.insertBefore(row2, row3);
-          tbody.insertBefore(row1, row2);
-        } else {
-          tbody.appendChild(row1);
-          tbody.appendChild(row2);
-          tbody.appendChild(row3);
+          return GeoJsonService.collectCoordinatesFromGeometry(data);
         }
-
-        updateRowNumbers();
-        recalculateSeconds(); // <── penting!
       }
 
-      function recalculateSeconds() {
-        const interval = parseInt(document.getElementById("second").value);
-        if (isNaN(interval)) return;
+      class PolylineMapManager {
+        constructor(options) {
+          this.defaultCenter = options.defaultCenter;
+          this.jsonInput = options.jsonInput;
+          this.pointCountEl = options.pointCountEl;
+          this.lineCountEl = options.lineCountEl;
 
-        const rows = document.querySelectorAll("#result table tbody tr");
-        let lastSecond = null;
+          this.map = L.map(options.mapId).setView(this.defaultCenter, 12);
+          this.drawnItems = new L.FeatureGroup().addTo(this.map);
 
-        rows.forEach((row, index) => {
-          const secInput = row.querySelector(".second-input");
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "&copy; OpenStreetMap contributors",
+          }).addTo(this.map);
 
-          // Jika baris STOP → biarkan detik apa adanya
-          if (row.classList.contains("stop-row")) {
-            lastSecond = parseInt(secInput.value);
+          this.drawControl = new L.Control.Draw({
+            draw: {
+              polygon: false,
+              rectangle: false,
+              circle: false,
+              circlemarker: false,
+              marker: false,
+              polyline: {
+                shapeOptions: {
+                  color: "#ffb703",
+                  weight: 4,
+                  opacity: 0.95,
+                },
+              },
+            },
+            edit: {
+              featureGroup: this.drawnItems,
+            },
+          });
+
+          this.map.addControl(this.drawControl);
+          this.createSearchControl();
+          this.registerMapEvents();
+
+          setTimeout(() => this.map.invalidateSize(), 200);
+          window.addEventListener("resize", () => this.map.invalidateSize());
+        }
+
+        createSearchControl() {
+          if (!L.Control.Geocoder) {
             return;
           }
 
-          // Baris pertama
-          if (lastSecond === null) {
-            lastSecond = parseInt(secInput.value);
+          this.searchControl = L.Control.geocoder({
+            defaultMarkGeocode: false,
+            placeholder: "Cari alamat atau lokasi...",
+            errorMessage: "Alamat tidak ditemukan.",
+          })
+            .on("markgeocode", (event) => {
+              const { bbox, center, name } = event.geocode;
+              const bounds = bbox
+                ? L.latLngBounds(bbox.getSouthWest(), bbox.getNorthEast())
+                : null;
+
+              if (bounds && bounds.isValid()) {
+                this.map.fitBounds(bounds.pad(0.2));
+              } else if (center) {
+                this.map.flyTo(center, 16, { duration: 0.8 });
+              }
+
+              if (center) {
+                L.popup()
+                  .setLatLng(center)
+                  .setContent(`Lokasi ditemukan: ${name}`)
+                  .openOn(this.map);
+              }
+            })
+            .addTo(this.map);
+        }
+
+        registerMapEvents() {
+          this.map.on(L.Draw.Event.CREATED, (event) => {
+            this.drawnItems.addLayer(event.layer);
+            this.syncMapToGeoJson();
+          });
+
+          this.map.on(L.Draw.Event.EDITED, () => {
+            this.syncMapToGeoJson();
+          });
+
+          this.map.on(L.Draw.Event.DELETED, () => {
+            this.syncMapToGeoJson();
+          });
+        }
+
+        loadFromTextarea() {
+          const data = GeoJsonService.parse(this.jsonInput.value);
+          const coordinates = GeoJsonService.extractCoordinates(data);
+
+          if (coordinates.length < 2) {
+            throw new Error("GeoJSON harus memiliki minimal 2 titik LineString.");
+          }
+
+          this.drawnItems.clearLayers();
+
+          if (data.type === "FeatureCollection") {
+            (data.features || []).forEach((feature) => this.addFeature(feature));
+          } else if (data.type === "Feature") {
+            this.addFeature(data);
+          } else {
+            this.addFeature({ type: "Feature", properties: {}, geometry: data });
+          }
+
+          this.fitToDrawnItems();
+          this.syncMapToGeoJson();
+        }
+
+        clear() {
+          this.drawnItems.clearLayers();
+          this.syncMapToGeoJson();
+          this.fitToDrawnItems();
+        }
+
+        addFeature(feature) {
+          const geometry = feature?.geometry;
+          if (!geometry) {
             return;
           }
 
-          // Baris normal → pakai interval
-          lastSecond = lastSecond + interval;
-          secInput.value = lastSecond;
-        });
-      }
+          if (geometry.type === "LineString") {
+            this.addLineString(geometry.coordinates);
+            return;
+          }
 
-      function createStopRow(seqValue, secondValue, lat, lon, speed, acc) {
-        const tr = document.createElement("tr");
-
-        tr.classList.add("stop-row");
-
-        tr.innerHTML = `
-    <td class="seq">${seqValue}</td>
-    <td class="no"></td>
-
-    <td><input type="number" class="form-control form-control-sm second-input" value="${secondValue}"></td>
-
-    <td class="lat">${lat}</td>
-    <td class="lon">${lon}</td>
-
-    <td class="sat">15</td>
-
-    <td><input type="number" class="form-control form-control-sm speed-input" value="${speed}"></td>
-
-    <td>
-      <select class="form-select form-select-sm acc-input">
-        <option value="1" ${acc === 1 ? "selected" : ""}>1</option>
-        <option value="0" ${acc === 0 ? "selected" : ""}>0</option>
-      </select>
-    </td>
-
-    <td>
-      <select class="form-select form-select-sm digital-input">
-        <option value="1" ${acc === 1 ? "selected" : ""}>1</option>
-        <option value="0" ${acc === 0 ? "selected" : ""}>0</option>
-      </select>
-    </td>
-
-    <td><input type="number" class="form-control form-control-sm temp1-input" value="0"></td>
-    <td><input type="number" class="form-control form-control-sm temp2-input" value="0"></td>
-
-    <td>
-      <select class="form-select form-select-sm set-select" onchange="handleSetAction(this)">
-        <option value="">-- Pilih --</option>
-        <option value="duplicate">Duplikat</option>
-        <option value="delete">Hapus</option>
-        <option value="stop">Berhenti</option>
-      </select>
-    </td>
-  `;
-
-        return tr;
-      }
-
-      function exportToTxt() {
-        const rows = document.querySelectorAll("#result table tbody tr");
-        if (rows.length === 0) {
-          alert("Tidak ada data untuk diexport!");
-          return;
+          if (geometry.type === "MultiLineString") {
+            (geometry.coordinates || []).forEach((line) => this.addLineString(line));
+          }
         }
 
-        // Ambil plat nomor
-        const plate = document.getElementById("licensePlate").value.trim();
-        const plateSafe =
-          plate !== "" ? plate.replace(/[^a-zA-Z0-9\-]/g, "") : "NO-LICENSE-PLATE";
+        addLineString(coordinates) {
+          const latLngs = (coordinates || [])
+            .filter(GeoJsonService.isCoordinatePair)
+            .map((coordinate) => [Number(coordinate[1]), Number(coordinate[0])]);
 
-        let content =
-          "second,Longitude,Latitude,Satellites,Speed,acc,digitalInput2,dallasTemperature1,dallasTemperature2\n";
+          if (latLngs.length >= 2) {
+            this.drawnItems.addLayer(
+              L.polyline(latLngs, {
+                color: "#ffb703",
+                weight: 4,
+                opacity: 0.95,
+              })
+            );
+          }
+        }
 
-        rows.forEach((row) => {
-          const second = row.querySelector(".second-input").value;
-          const lon = row.querySelector(".lon").innerText;
+        collectPolylineLatLngs() {
+          const lines = [];
+
+          this.drawnItems.eachLayer((layer) => {
+            if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+              lines.push(layer.getLatLngs());
+            }
+          });
+
+          return lines;
+        }
+
+        serializeToGeoJson() {
+          const features = [];
+
+          this.drawnItems.eachLayer((layer) => {
+            if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+              const coordinates = layer
+                .getLatLngs()
+                .map((latLng) => [latLng.lng, latLng.lat]);
+
+              if (coordinates.length >= 2) {
+                features.push({
+                  type: "Feature",
+                  properties: {},
+                  geometry: {
+                    type: "LineString",
+                    coordinates,
+                  },
+                });
+              }
+            }
+          });
+
+          return {
+            type: "FeatureCollection",
+            features,
+          };
+        }
+
+        syncMapToGeoJson() {
+          this.jsonInput.value = JSON.stringify(this.serializeToGeoJson(), null, 2);
+          this.updateStats();
+        }
+
+        updateStats() {
+          const lines = this.collectPolylineLatLngs();
+          const pointCount = lines.reduce((total, line) => total + line.length, 0);
+
+          this.pointCountEl.innerText = pointCount;
+          this.lineCountEl.innerText = lines.length;
+        }
+
+        fitToDrawnItems() {
+          const bounds = this.drawnItems.getBounds();
+
+          if (bounds.isValid()) {
+            this.map.fitBounds(bounds.pad(0.12));
+          } else {
+            this.map.setView(this.defaultCenter, 12);
+          }
+        }
+      }
+
+      class CoordinateTableManager {
+        constructor(options) {
+          this.resultContainer = options.resultContainer;
+          this.inputs = options.inputs;
+
+          this.resultContainer.addEventListener("change", (event) => {
+            if (!event.target.classList.contains("set-select")) {
+              return;
+            }
+
+            this.handleSetAction(event.target);
+          });
+        }
+
+        getNumericInput(key) {
+          return parseInt(this.inputs[key].value, 10);
+        }
+
+        getValidatedRanges() {
+          const ranges = {
+            second: this.getNumericInput("second"),
+            minSpeed: this.getNumericInput("minSpeed"),
+            maxSpeed: this.getNumericInput("maxSpeed"),
+            minTemp1: this.getNumericInput("minTemp1"),
+            maxTemp1: this.getNumericInput("maxTemp1"),
+            minTemp2: this.getNumericInput("minTemp2"),
+            maxTemp2: this.getNumericInput("maxTemp2"),
+          };
+
+          if (Number.isNaN(ranges.second) || ranges.second < 0) {
+            throw new Error("Nilai second tidak valid.");
+          }
+
+          if (
+            Number.isNaN(ranges.minSpeed) ||
+            Number.isNaN(ranges.maxSpeed) ||
+            ranges.minSpeed > ranges.maxSpeed
+          ) {
+            throw new Error("Range speed tidak valid! Pastikan minimal <= maksimal.");
+          }
+
+          if (
+            Number.isNaN(ranges.minTemp1) ||
+            Number.isNaN(ranges.maxTemp1) ||
+            ranges.minTemp1 > ranges.maxTemp1
+          ) {
+            throw new Error("Range temperature 1 tidak valid.");
+          }
+
+          if (
+            Number.isNaN(ranges.minTemp2) ||
+            Number.isNaN(ranges.maxTemp2) ||
+            ranges.minTemp2 > ranges.maxTemp2
+          ) {
+            throw new Error("Range temperature 2 tidak valid.");
+          }
+
+          return ranges;
+        }
+
+        renderFromCoordinates(coordinates) {
+          if (coordinates.length === 0) {
+            throw new Error("Tidak ada koordinat LineString yang bisa diproses.");
+          }
+
+          const ranges = this.getValidatedRanges();
+          let interval = 0;
+
+          const rows = coordinates
+            .map((item, index) => {
+              const lon = Number(item[0]);
+              const lat = Number(item[1]);
+              const speed =
+                index === 0
+                  ? 0
+                  : this.randomBetween(ranges.minSpeed, ranges.maxSpeed);
+              const acc = index === 0 ? 0 : 1;
+              const currentSecond = index === 0 ? 0 : (interval += ranges.second);
+
+              return `
+                <tr>
+                  <td class="seq">${index + 1}</td>
+                  <td class="no">${index + 1}</td>
+                  <td><input type="number" class="form-control form-control-sm second-input" value="${currentSecond}"></td>
+                  <td class="lat">${lat}</td>
+                  <td class="lon">${lon}</td>
+                  <td class="sat">15</td>
+                  <td><input type="number" class="form-control form-control-sm speed-input" value="${speed}"></td>
+                  <td>
+                    <select class="form-select form-select-sm acc-input">
+                      <option value="1" ${acc === 1 ? "selected" : ""}>1</option>
+                      <option value="0" ${acc === 0 ? "selected" : ""}>0</option>
+                    </select>
+                  </td>
+                  <td>
+                    <select class="form-select form-select-sm digital-input">
+                      <option value="1" ${acc === 1 ? "selected" : ""}>1</option>
+                      <option value="0" ${acc === 0 ? "selected" : ""}>0</option>
+                    </select>
+                  </td>
+                  <td><input type="number" class="form-control form-control-sm temp1-input" value="${this.randomBetween(ranges.minTemp1, ranges.maxTemp1)}"></td>
+                  <td><input type="number" class="form-control form-control-sm temp2-input" value="${this.randomBetween(ranges.minTemp2, ranges.maxTemp2)}"></td>
+                  <td>${this.buildActionSelect()}</td>
+                </tr>
+              `;
+            })
+            .join("");
+
+          this.resultContainer.innerHTML = `
+            <table class="table table-bordered table-striped align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Seq</th>
+                  <th>No</th>
+                  <th>Second</th>
+                  <th>Latitude</th>
+                  <th>Longitude</th>
+                  <th>Satellites</th>
+                  <th>Speed</th>
+                  <th>ACC</th>
+                  <th>DIGITALINPUT2</th>
+                  <th>DALLASTEMPERATURE1</th>
+                  <th>DALLASTEMPERATURE2</th>
+                  <th>Set</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          `;
+        }
+
+        buildActionSelect() {
+          return `
+            <select class="form-select form-select-sm set-select">
+              <option value="">-- Pilih --</option>
+              <option value="duplicate">Duplicate</option>
+              <option value="delete">Delete</option>
+              <option value="stop">Berhenti</option>
+            </select>
+          `;
+        }
+
+        randomBetween(min, max) {
+          return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        getRows() {
+          return this.resultContainer.querySelectorAll("table tbody tr");
+        }
+
+        handleSetAction(selectEl) {
+          const action = selectEl.value;
+          if (!action) {
+            return;
+          }
+
+          const row = selectEl.closest("tr");
+
+          if (action === "duplicate") {
+            this.duplicateRow(row);
+          } else if (action === "delete") {
+            this.deleteRow(row);
+          } else if (action === "stop") {
+            this.stopRow(row);
+          }
+
+          selectEl.value = "";
+        }
+
+        duplicateRow(row) {
+          const clone = row.cloneNode(true);
+          clone.querySelector(".set-select").value = "";
+          row.parentNode.insertBefore(clone, row.nextSibling);
+
+          this.updateRowNumbers();
+          this.recalculateSeconds();
+        }
+
+        deleteRow(row) {
+          const tbody = row.parentNode;
+          if (tbody.querySelectorAll("tr").length <= 1) {
+            alert("Minimal harus ada 1 baris!");
+            return;
+          }
+
+          row.remove();
+          this.updateRowNumbers();
+          this.recalculateSeconds();
+        }
+
+        stopRow(row) {
+          const secondInterval = this.getNumericInput("second");
+          if (Number.isNaN(secondInterval)) {
+            alert("Second interval tidak valid!");
+            return;
+          }
+
+          const tbody = row.parentNode;
+          const originalSecond =
+            parseInt(row.querySelector(".second-input").value, 10) || 0;
+          const seq = row.querySelector(".seq").innerText;
           const lat = row.querySelector(".lat").innerText;
-          const sat = row.querySelector(".sat").innerText;
-          const speed = row.querySelector(".speed-input").value;
-          const acc = row.querySelector(".acc-input").value;
-          const digital = row.querySelector(".digital-input").value;
-          const temp1 = row.querySelector(".temp1-input").value;
-          const temp2 = row.querySelector(".temp2-input").value;
+          const lon = row.querySelector(".lon").innerText;
+          const nextSibling = row.nextSibling;
 
-          content += `${second},${lon},${lat},${sat},${speed},${acc},${digital},${temp1},${temp2}\n`;
-        });
+          row.remove();
 
-        const blob = new Blob([content], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
+          const stopRows = [
+            this.createStopRow(seq, originalSecond, lat, lon, 0, 1),
+            this.createStopRow(seq, originalSecond + 120, lat, lon, 0, 0),
+            this.createStopRow(seq, originalSecond + 120 + secondInterval, lat, lon, 0, 1),
+          ];
 
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `RUN-${plateSafe}.txt`; // <── Nama file sesuai plat nomor
-        a.click();
+          stopRows.reverse().forEach((stopRow) => {
+            if (nextSibling) {
+              tbody.insertBefore(stopRow, nextSibling);
+            } else {
+              tbody.appendChild(stopRow);
+            }
+          });
 
-        URL.revokeObjectURL(url);
+          this.updateRowNumbers();
+          this.recalculateSeconds();
+        }
+
+        createStopRow(seqValue, secondValue, lat, lon, speed, acc) {
+          const tr = document.createElement("tr");
+          tr.classList.add("stop-row");
+          tr.innerHTML = `
+            <td class="seq">${seqValue}</td>
+            <td class="no"></td>
+            <td><input type="number" class="form-control form-control-sm second-input" value="${secondValue}"></td>
+            <td class="lat">${lat}</td>
+            <td class="lon">${lon}</td>
+            <td class="sat">15</td>
+            <td><input type="number" class="form-control form-control-sm speed-input" value="${speed}"></td>
+            <td>
+              <select class="form-select form-select-sm acc-input">
+                <option value="1" ${acc === 1 ? "selected" : ""}>1</option>
+                <option value="0" ${acc === 0 ? "selected" : ""}>0</option>
+              </select>
+            </td>
+            <td>
+              <select class="form-select form-select-sm digital-input">
+                <option value="1" ${acc === 1 ? "selected" : ""}>1</option>
+                <option value="0" ${acc === 0 ? "selected" : ""}>0</option>
+              </select>
+            </td>
+            <td><input type="number" class="form-control form-control-sm temp1-input" value="0"></td>
+            <td><input type="number" class="form-control form-control-sm temp2-input" value="0"></td>
+            <td>${this.buildActionSelect()}</td>
+          `;
+
+          return tr;
+        }
+
+        updateRowNumbers() {
+          this.getRows().forEach((row, index) => {
+            row.querySelector(".no").innerText = index + 1;
+          });
+        }
+
+        recalculateSeconds() {
+          const interval = this.getNumericInput("second");
+          if (Number.isNaN(interval)) {
+            return;
+          }
+
+          let lastSecond = null;
+
+          this.getRows().forEach((row) => {
+            const secondInput = row.querySelector(".second-input");
+
+            if (row.classList.contains("stop-row")) {
+              lastSecond = parseInt(secondInput.value, 10);
+              return;
+            }
+
+            if (lastSecond === null) {
+              lastSecond = parseInt(secondInput.value, 10) || 0;
+              secondInput.value = lastSecond;
+              return;
+            }
+
+            lastSecond += interval;
+            secondInput.value = lastSecond;
+          });
+        }
+
+        regenerateSecond() {
+          const interval = this.getNumericInput("second");
+          if (Number.isNaN(interval) || interval < 0) {
+            alert("Interval second tidak valid!");
+            return;
+          }
+
+          this.getRows().forEach((row, index) => {
+            row.querySelector(".second-input").value = index === 0 ? 0 : interval * index;
+          });
+        }
+
+        exportToTxt(plateValue) {
+          const rows = this.getRows();
+          if (rows.length === 0) {
+            alert("Tidak ada data untuk diexport!");
+            return;
+          }
+
+          const plateSafe =
+            plateValue.trim() !== ""
+              ? plateValue.trim().replace(/[^a-zA-Z0-9\-]/g, "")
+              : "NO-LICENSE-PLATE";
+
+          let content =
+            "second,Longitude,Latitude,Satellites,Speed,acc,digitalInput2,dallasTemperature1,dallasTemperature2\n";
+
+          rows.forEach((row) => {
+            const second = row.querySelector(".second-input").value;
+            const lon = row.querySelector(".lon").innerText;
+            const lat = row.querySelector(".lat").innerText;
+            const sat = row.querySelector(".sat").innerText;
+            const speed = row.querySelector(".speed-input").value;
+            const acc = row.querySelector(".acc-input").value;
+            const digital = row.querySelector(".digital-input").value;
+            const temp1 = row.querySelector(".temp1-input").value;
+            const temp2 = row.querySelector(".temp2-input").value;
+
+            content += `${second},${lon},${lat},${sat},${speed},${acc},${digital},${temp1},${temp2}\n`;
+          });
+
+          const blob = new Blob([content], { type: "text/plain" });
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement("a");
+
+          anchor.href = url;
+          anchor.download = `RUN-${plateSafe}.txt`;
+          anchor.click();
+
+          URL.revokeObjectURL(url);
+        }
       }
+
+      class TelematicsGeneratorApp {
+        constructor() {
+          this.elements = {
+            jsonInput: document.getElementById("jsonInput"),
+            licensePlate: document.getElementById("licensePlate"),
+            second: document.getElementById("second"),
+            minSpeed: document.getElementById("minSpeed"),
+            maxSpeed: document.getElementById("maxSpeed"),
+            minTemp1: document.getElementById("minTemp1"),
+            maxTemp1: document.getElementById("maxTemp1"),
+            minTemp2: document.getElementById("minTemp2"),
+            maxTemp2: document.getElementById("maxTemp2"),
+            result: document.getElementById("result"),
+            mapPointCount: document.getElementById("mapPointCount"),
+            mapLineCount: document.getElementById("mapLineCount"),
+            loadGeoJsonBtn: document.getElementById("loadGeoJsonBtn"),
+            clearPolylineBtn: document.getElementById("clearPolylineBtn"),
+            regenerateSecondBtn: document.getElementById("regenerateSecondBtn"),
+            convertTableBtn: document.getElementById("convertTableBtn"),
+            exportTxtBtn: document.getElementById("exportTxtBtn"),
+          };
+
+          this.mapManager = new PolylineMapManager({
+            mapId: "map",
+            defaultCenter: [-6.2088, 106.8456],
+            jsonInput: this.elements.jsonInput,
+            pointCountEl: this.elements.mapPointCount,
+            lineCountEl: this.elements.mapLineCount,
+          });
+
+          this.tableManager = new CoordinateTableManager({
+            resultContainer: this.elements.result,
+            inputs: this.elements,
+          });
+
+          this.bindEvents();
+        }
+
+        bindEvents() {
+          this.elements.loadGeoJsonBtn.addEventListener("click", () => {
+            this.runSafely(() => this.mapManager.loadFromTextarea());
+          });
+
+          this.elements.clearPolylineBtn.addEventListener("click", () => {
+            this.mapManager.clear();
+          });
+
+          this.elements.regenerateSecondBtn.addEventListener("click", () => {
+            this.tableManager.regenerateSecond();
+          });
+
+          this.elements.convertTableBtn.addEventListener("click", () => {
+            this.runSafely(() => {
+              const data = GeoJsonService.parse(this.elements.jsonInput.value);
+              const coordinates = GeoJsonService.extractCoordinates(data);
+              this.tableManager.renderFromCoordinates(coordinates);
+            });
+          });
+
+          this.elements.exportTxtBtn.addEventListener("click", () => {
+            this.tableManager.exportToTxt(this.elements.licensePlate.value);
+          });
+        }
+
+        runSafely(action) {
+          try {
+            action();
+          } catch (error) {
+            alert(error.message);
+          }
+        }
+
+        init() {
+          this.runSafely(() => this.mapManager.loadFromTextarea());
+        }
+      }
+
+      const app = new TelematicsGeneratorApp();
+      app.init();
     </script>
   </body>
 </html>
