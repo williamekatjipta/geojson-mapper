@@ -95,6 +95,62 @@
         background-color: #ffffff;
       }
 
+      .route-point-marker {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        background: #fff7d6;
+        border: 1px solid #8c6d00;
+        color: #4f3c00;
+        font-size: 11px;
+        font-weight: 700;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+      }
+
+      .geofence-panel {
+        margin-top: 1rem;
+        padding: 1rem;
+        border-radius: 1rem;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+      }
+
+      .geofence-list {
+        display: grid;
+        gap: 0.75rem;
+        max-height: 320px;
+        overflow-y: auto;
+      }
+
+      .geofence-item {
+        padding: 0.9rem;
+        border-radius: 0.9rem;
+        background: rgba(6, 21, 16, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .geofence-item.active {
+        border-color: rgba(255, 183, 3, 0.85);
+        box-shadow: inset 0 0 0 1px rgba(255, 183, 3, 0.25);
+      }
+
+      .geofence-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .geofence-empty {
+        padding: 0.9rem;
+        border-radius: 0.9rem;
+        border: 1px dashed rgba(255, 255, 255, 0.22);
+        color: #d6e6dd;
+        text-align: center;
+      }
+
       @media (max-width: 991.98px) {
         :root {
           --map-height: 420px;
@@ -284,6 +340,67 @@
               </div>
 
               <div id="map"></div>
+
+              <div class="geofence-panel">
+                <div class="d-flex flex-wrap justify-content-between gap-3 mb-3">
+                  <div>
+                    <h5 class="mb-1">Geofence Tools</h5>
+                    <div class="helper-text">
+                      Buat polygon geofence dari format koordinat
+                      `(-7.2574719,112.7520883)` lalu simpan, update, atau hapus
+                      tanpa memengaruhi tabel route.
+                    </div>
+                  </div>
+                  <span class="badge text-bg-warning">
+                    Geofence: <span id="geofenceCount">0</span>
+                  </span>
+                </div>
+
+                <div class="row g-3">
+                  <div class="col-lg-5">
+                    <label class="form-label">Nama Geofence</label>
+                    <input
+                      type="text"
+                      id="geofenceName"
+                      class="form-control"
+                      placeholder="Contoh: Warehouse Surabaya"
+                    />
+
+                    <label class="form-label mt-3">Coordinates</label>
+                    <textarea
+                      id="geofenceCoordinates"
+                      class="form-control"
+                      rows="7"
+                      placeholder="(-7.25847190, 112.75308830), (-7.25847190, 112.75108830), (-7.25647190, 112.75108830), (-7.25721690, 112.75218171)"
+                    ></textarea>
+
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                      <button
+                        class="btn btn-warning"
+                        id="saveGeofenceBtn"
+                        type="button"
+                      >
+                        Simpan Geofence
+                      </button>
+                      <button
+                        class="btn btn-outline-light"
+                        id="resetGeofenceBtn"
+                        type="button"
+                      >
+                        Reset Form
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="col-lg-7">
+                    <div class="d-flex justify-content-between align-items-center mb-2 gap-3 flex-wrap">
+                      <label class="form-label mb-0">Daftar Geofence</label>
+                      <small id="geofenceMode" class="helper-text">Mode: Create</small>
+                    </div>
+                    <div id="geofenceList" class="geofence-list"></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -397,6 +514,7 @@
 
           this.map = L.map(options.mapId).setView(this.defaultCenter, 12);
           this.drawnItems = new L.FeatureGroup().addTo(this.map);
+          this.pointMarkers = new L.LayerGroup().addTo(this.map);
 
           L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             maxZoom: 19,
@@ -579,8 +697,28 @@
         }
 
         syncMapToGeoJson() {
-          this.jsonInput.value = JSON.stringify(this.serializeToGeoJson(), null, 2);
+          const geoJson = this.serializeToGeoJson();
+          this.jsonInput.value = JSON.stringify(geoJson, null, 2);
+          this.renderPointMarkers(geoJson);
           this.updateStats();
+        }
+
+        renderPointMarkers(geoJson) {
+          this.pointMarkers.clearLayers();
+
+          GeoJsonService.extractCoordinates(geoJson).forEach((coordinate, index) => {
+            const marker = L.marker([Number(coordinate[1]), Number(coordinate[0])], {
+              interactive: false,
+              icon: L.divIcon({
+                className: "",
+                html: `<div class="route-point-marker">${index + 1}</div>`,
+                iconSize: [22, 22],
+                iconAnchor: [11, 11],
+              }),
+            });
+
+            marker.addTo(this.pointMarkers);
+          });
         }
 
         updateStats() {
@@ -599,6 +737,259 @@
           } else {
             this.map.setView(this.defaultCenter, 12);
           }
+        }
+      }
+
+      class GeofenceManager {
+        constructor(options) {
+          this.map = options.map;
+          this.nameInput = options.nameInput;
+          this.coordinatesInput = options.coordinatesInput;
+          this.listEl = options.listEl;
+          this.countEl = options.countEl;
+          this.modeEl = options.modeEl;
+          this.storageKey = "geojson-mapper-geofences";
+          this.layerGroup = new L.FeatureGroup().addTo(this.map);
+          this.geofences = [];
+          this.editingId = null;
+          this.activeId = null;
+          this.defaultStyle = {
+            color: "#ff5d73",
+            weight: 2,
+            fillColor: "#ff5d73",
+            fillOpacity: 0.2,
+          };
+          this.activeStyle = {
+            color: "#ffd166",
+            weight: 3,
+            fillColor: "#ffd166",
+            fillOpacity: 0.26,
+          };
+
+          this.loadFromStorage();
+          this.renderList();
+          this.renderLayers();
+        }
+
+        loadFromStorage() {
+          try {
+            const raw = localStorage.getItem(this.storageKey);
+            const parsed = raw ? JSON.parse(raw) : [];
+            this.geofences = Array.isArray(parsed) ? parsed : [];
+          } catch (error) {
+            this.geofences = [];
+          }
+        }
+
+        saveToStorage() {
+          localStorage.setItem(this.storageKey, JSON.stringify(this.geofences));
+        }
+
+        parseCoordinateText(text) {
+          const matches = [...text.matchAll(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/g)];
+          if (matches.length < 3) {
+            throw new Error("Geofence butuh minimal 3 titik dengan format (lat, lng).");
+          }
+
+          return matches.map((match) => {
+            const lat = Number(match[1]);
+            const lng = Number(match[2]);
+
+            if (
+              !Number.isFinite(lat) ||
+              !Number.isFinite(lng) ||
+              Math.abs(lat) > 90 ||
+              Math.abs(lng) > 180
+            ) {
+              throw new Error("Ada koordinat geofence yang tidak valid.");
+            }
+
+            return { lat, lng };
+          });
+        }
+
+        upsertFromForm() {
+          const name = this.nameInput.value.trim();
+          if (!name) {
+            throw new Error("Nama geofence wajib diisi.");
+          }
+
+          const coordinates = this.parseCoordinateText(this.coordinatesInput.value);
+          const geofence = {
+            id: this.editingId || this.generateId(),
+            name,
+            coordinates,
+          };
+
+          const existingIndex = this.geofences.findIndex(
+            (item) => item.id === geofence.id
+          );
+
+          if (existingIndex >= 0) {
+            this.geofences.splice(existingIndex, 1, geofence);
+          } else {
+            this.geofences.push(geofence);
+          }
+
+          this.editingId = geofence.id;
+          this.activeId = geofence.id;
+          this.saveToStorage();
+          this.renderLayers();
+          this.renderList();
+          this.focusGeofence(geofence.id);
+        }
+
+        deleteGeofence(id) {
+          this.geofences = this.geofences.filter((item) => item.id !== id);
+          if (this.activeId === id) {
+            this.activeId = null;
+          }
+          if (this.editingId === id) {
+            this.resetForm();
+          }
+
+          this.saveToStorage();
+          this.renderLayers();
+          this.renderList();
+        }
+
+        startEditing(id) {
+          const geofence = this.geofences.find((item) => item.id === id);
+          if (!geofence) {
+            return;
+          }
+
+          this.editingId = id;
+          this.activeId = id;
+          this.nameInput.value = geofence.name;
+          this.coordinatesInput.value = this.formatCoordinates(geofence.coordinates);
+          this.renderLayers();
+          this.renderList();
+        }
+
+        resetForm() {
+          this.editingId = null;
+          this.activeId = null;
+          this.nameInput.value = "";
+          this.coordinatesInput.value = "";
+          this.renderLayers();
+          this.renderList();
+        }
+
+        focusGeofence(id) {
+          const layer = this.layerGroup.getLayers().find((item) => item.geofenceId === id);
+          if (!layer) {
+            return;
+          }
+
+          const bounds = layer.getBounds();
+          if (bounds.isValid()) {
+            this.map.fitBounds(bounds.pad(0.2));
+          }
+
+          this.activeId = id;
+          this.renderLayers();
+          this.renderList();
+          layer.openPopup();
+        }
+
+        renderLayers() {
+          this.layerGroup.clearLayers();
+
+          this.geofences.forEach((geofence) => {
+            const style =
+              geofence.id === (this.activeId || this.editingId)
+                ? this.activeStyle
+                : this.defaultStyle;
+            const polygon = L.polygon(
+              geofence.coordinates.map((point) => [point.lat, point.lng]),
+              style
+            );
+
+            polygon.geofenceId = geofence.id;
+            polygon.bindPopup(
+              `<strong>${this.escapeHtml(geofence.name)}</strong><br/>${geofence.coordinates.length} titik`
+            );
+            polygon.addTo(this.layerGroup);
+          });
+        }
+
+        renderList() {
+          this.countEl.innerText = this.geofences.length;
+          this.modeEl.innerText = this.editingId ? "Mode: Update" : "Mode: Create";
+
+          if (this.geofences.length === 0) {
+            this.listEl.innerHTML =
+              '<div class="geofence-empty">Belum ada geofence.</div>';
+            return;
+          }
+
+          this.listEl.innerHTML = this.geofences
+            .map((geofence) => {
+              const activeClass =
+                geofence.id === (this.activeId || this.editingId) ? " active" : "";
+              return `
+                <div class="geofence-item${activeClass}">
+                  <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div>
+                      <div class="fw-semibold">${this.escapeHtml(geofence.name)}</div>
+                      <small class="helper-text">${geofence.coordinates.length} titik</small>
+                    </div>
+                    <span class="badge text-bg-light">${this.escapeHtml(geofence.id.slice(0, 8))}</span>
+                  </div>
+                  <div class="geofence-actions mt-3">
+                    <button class="btn btn-sm btn-outline-light" type="button" data-geofence-action="focus" data-geofence-id="${geofence.id}">
+                      Fokus
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning" type="button" data-geofence-action="edit" data-geofence-id="${geofence.id}">
+                      Update
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" type="button" data-geofence-action="delete" data-geofence-id="${geofence.id}">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              `;
+            })
+            .join("");
+        }
+
+        bindListEvents() {
+          this.listEl.addEventListener("click", (event) => {
+            const button = event.target.closest("[data-geofence-action]");
+            if (!button) {
+              return;
+            }
+
+            const { geofenceAction, geofenceId } = button.dataset;
+
+            if (geofenceAction === "focus") {
+              this.focusGeofence(geofenceId);
+            } else if (geofenceAction === "edit") {
+              this.startEditing(geofenceId);
+            } else if (geofenceAction === "delete") {
+              this.deleteGeofence(geofenceId);
+            }
+          });
+        }
+
+        formatCoordinates(coordinates) {
+          return coordinates
+            .map((point) => `(${point.lat}, ${point.lng})`)
+            .join(", ");
+        }
+
+        generateId() {
+          return `gf-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        }
+
+        escapeHtml(value) {
+          return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
         }
       }
 
@@ -959,8 +1350,15 @@
             result: document.getElementById("result"),
             mapPointCount: document.getElementById("mapPointCount"),
             mapLineCount: document.getElementById("mapLineCount"),
+            geofenceName: document.getElementById("geofenceName"),
+            geofenceCoordinates: document.getElementById("geofenceCoordinates"),
+            geofenceList: document.getElementById("geofenceList"),
+            geofenceCount: document.getElementById("geofenceCount"),
+            geofenceMode: document.getElementById("geofenceMode"),
             loadGeoJsonBtn: document.getElementById("loadGeoJsonBtn"),
             clearPolylineBtn: document.getElementById("clearPolylineBtn"),
+            saveGeofenceBtn: document.getElementById("saveGeofenceBtn"),
+            resetGeofenceBtn: document.getElementById("resetGeofenceBtn"),
             regenerateSecondBtn: document.getElementById("regenerateSecondBtn"),
             convertTableBtn: document.getElementById("convertTableBtn"),
             exportTxtBtn: document.getElementById("exportTxtBtn"),
@@ -979,6 +1377,16 @@
             inputs: this.elements,
           });
 
+          this.geofenceManager = new GeofenceManager({
+            map: this.mapManager.map,
+            nameInput: this.elements.geofenceName,
+            coordinatesInput: this.elements.geofenceCoordinates,
+            listEl: this.elements.geofenceList,
+            countEl: this.elements.geofenceCount,
+            modeEl: this.elements.geofenceMode,
+          });
+          this.geofenceManager.bindListEvents();
+
           this.bindEvents();
         }
 
@@ -989,6 +1397,14 @@
 
           this.elements.clearPolylineBtn.addEventListener("click", () => {
             this.mapManager.clear();
+          });
+
+          this.elements.saveGeofenceBtn.addEventListener("click", () => {
+            this.runSafely(() => this.geofenceManager.upsertFromForm());
+          });
+
+          this.elements.resetGeofenceBtn.addEventListener("click", () => {
+            this.geofenceManager.resetForm();
           });
 
           this.elements.regenerateSecondBtn.addEventListener("click", () => {
